@@ -23,7 +23,7 @@ bins = 100;                            % number of samples to plot the CDFs and 
 
 %%%%%%%%%%%%%% SETUP %%%%%%%%%%%%%% 
  
-dataPath = '../data/sdss_sample.csv';  % path to the data set, has to be in the following format m_1,m_2,..,m_k,e_1,e_2,...,e_k,z_spec
+dataPath = 'data/sdss_sample.csv';     % path to the data set, has to be in the following format m_1,m_2,..,m_k,e_1,e_2,...,e_k,z_spec
                                        % where m_i is the i-th magnitude, e_i is its associated uncertainty and z_spec is the spectroscopic redshift
                                        % [required]
                                         
