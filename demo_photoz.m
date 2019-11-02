@@ -9,7 +9,7 @@ K = 100;                                % number of mixtures to use [required]
 
 maxIter = 100;                          % maximum number of iterations
 tol = 1e-10;                            % early stoping criteria if no significant improvement is gained
-init= 'conditional';                    % how to initialize ('rand', 'conditional', 'kmeans')
+init= 'kmeans';                         % how to initialize ('rand', 'conditional', 'kmeans')
 cov = 'full';                           % type of covariance ('full', 'diag')
 display=1;                              % display progress
  

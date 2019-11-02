@@ -1,20 +1,20 @@
 
 %%%%%% CONFIGURATION %%%%%% 
-rng(1);         % fix random seed
-addpath VB_GMM/ % add path
+rng(1);             % fix random seed
+addpath VB_GMM/     % add path
 
 % training options
-maxIter = 500;  % maximum number of iterations
-tol = 1e-5;     % early stoping criteria if no significant improvement is gained
-init= 'kmeans'; % initialization option ('rand', 'conditional', 'kmeans')
-cov = 'full';   % type of covariance ('full', 'diag')
-display=1;      % display progress
+maxIter = 100;      % maximum number of iterations
+tol = 1e-10;        % early stoping criteria if no significant improvement is gained
+init= 'kmeans';     % initialization option ('rand', 'conditional', 'kmeans')
+cov = 'full';       % type of covariance ('full', 'diag')
+display=1;          % display progress
 
 % data creating options
 
-n = 1000;       % number of samples
-K = 100;        % number of mixtures (much higher than the real number of 3)
-percentage=0.5;% percentage of data with a missing variable (half will be missing x and the other half will be missing y)
+n = 1000;           % number of samples
+K = 100;            % number of mixtures (much higher than the real number of 3)
+percentage = 0.0;   % percentage of data with a missing variable (half will be missing x and the other half will be missing y)
 
 %%%%%% SETUP %%%%%% 
 
@@ -49,14 +49,12 @@ X2(shuffle(1:floor(percentage*n(2))),1) = nan;
 shuffle = randperm(n(3));
 X3(shuffle(1:floor(percentage*n(3))),2) = nan;
 
-
 X = [X1;X2;X3];
 
 missing = isnan(X);
 
 d =  size(X,2);
 %%%%%% TRAINING %%%%%% 
-
 
 % training options
 options.cyc=maxIter;
@@ -67,6 +65,7 @@ options.display=display;
 
 % Fitting a GMM to the data set
 model = gmmvar_missing(X,K,options);
+% model = kmeans_missing(X,K,100);
 
 %%%%%%%%%%%%%%%%% PLOTING %%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -81,7 +80,7 @@ hold on;
 
 % plot samples with both x & y
 both = ~missing(:,1)&~missing(:,2);
-x_and_y = plot(X(both,1),X(both,2),'b.');
+x_and_y = plot(X(both,1),X(both,2),'k.');
 
 % plot samples with both x
 missing_x = plot(X(missing(:,1),1),X(missing(:,1),2),'ko','MarkerFaceColor','g');
@@ -92,7 +91,7 @@ missing_y = plot(X(missing(:,2),1),X(missing(:,2),2),'ko','MarkerFaceColor','y')
 % plot the mixtures' means and covariances
 for k=1:model.K
         
-    ellipse = error_ellipse(model.Sigmas(:,:,k),model.mus(k,:),'style','r--','conf',0.95);
+    ellipse = error_ellipse(model.Sigmas(:,:,k),model.mus(k,:),'style','-','conf',0.95);
     center = plot(model.mus(k,1),model.mus(k,2),'ko','markersize',10,'MarkerFaceColor','r');
     
 end
@@ -138,12 +137,13 @@ for o=1:2
 
     figure;
     hold on;
-    
+
+    % plot the range +\- 2 std
     f = [upper; flip(lower)];
     pm2sigma = fill([Xs; flip(Xs)], f, [0.85 0.85 0.85]);
 
     
-    x_and_y = plot(X(both,o),X(both,u),'b.');
+    x_and_y = plot(X(both,o),X(both,u),'k.');
 
     % plot samples with both variable 'o' observed
     missing_o = plot(X(missing(:,o),o),X(missing(:,o),u),'ko','MarkerFaceColor','g');
@@ -151,17 +151,16 @@ for o=1:2
     % plot samples with both variable 'u' observed
     missing_u = plot(X(missing(:,u),o),X(missing(:,u),u),'ko','MarkerFaceColor','y');
 
-    % plot the range curves
-%     plot(Xs,upper,'k-',Xs,lower,'k-','LineWidth',2);
-
-    % plot the mean curve
-    mu_plot = plot(Xs,mu,'k-','LineWidth',2);
     
     % plot the mode curve
-    mode_plot = plot(Xs,mode,'r-','LineWidth',2);
+    mode_plot = plot(Xs,mode,'b-','LineWidth',2);
     
     % plot the median curve
     median_plot = plot(Xs,median,'g-','LineWidth',2);
+    
+    % plot the mean curve
+    mu_plot = plot(Xs,mu,'r-','LineWidth',2);
+    
     
     if(sum(missing(:))>0)
         handles = [pm2sigma(1),mu_plot(1),mode_plot(1),median_plot(1),x_and_y(1),missing_o(1), missing_u(1)];

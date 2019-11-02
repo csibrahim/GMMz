@@ -129,7 +129,7 @@ for cyc=1:options.cyc
     gmm.pjgx=estep(gmm,X,K,groups);
 
     % The M-Step, i.e. estimating Q(model parameters)
-    gmm=mstep(gmm,X,K,groups);
+    gmm=mstep(gmm,X,K);
 
     % computation of free energy 
     
@@ -191,14 +191,8 @@ return
 function pjgx = estep(gmm,X,K, groups)
 
 
-observed = ~isnan(X);
-min_do = min(sum(observed,2));
-
-% PsiDiralphasum is removed because it will cancel out during normalization
-
-% [Dir_alpha{1:K}]=deal(gmm.post.Dir_alpha);
-% Dir_alpha=cat(2,Dir_alpha{:});
-% PsiDiralphasum=psi(sum(Dir_alpha));
+O = ~isnan(X);
+min_do = min(sum(O,2));
 
 for k=1:K
 
@@ -208,7 +202,7 @@ for k=1:K
         
         group = groups(:,g);
 
-        o = observed(find(group,1),:);
+        o = O(find(group,1),:);
 
         do = sum(o);
         
@@ -222,7 +216,6 @@ for k=1:K
         
         delta = X(group,o)-qp.Norm_Mu(o)';
         dist = -0.5*sum((delta/L).^2,2)*qp.Wish_alpha;
-        
         
         PsiDiralpha=psi(qp.Dir_alpha);
         PsiWish_alphasum = 0.5*sum(psi(qp.Wish_alpha+0.5-(1:do)/2));
@@ -241,88 +234,60 @@ px=sum(gmm.pjgx,2);
 gmm.pjgx=bsxfun(@rdivide,gmm.pjgx,px);
 pjgx=gmm.pjgx;
 
-% another way of normalising
-%    for k=1:K(a),
-%      col_sum=gmm(a).pjgx(:,k)*ones(1,K(a));
-%      inv_prob=sum(gmm(a).pjgx./col_sum,2);
-%      if any(inv_prob==0)
-% 	disp(['Zero normalisation constant for hidden variable' ...
-% 	      ' posteriors']);
-% 	return;
-%      else
-% 	gmm(a).pjgx(:,k)=1./sum(gmm(a).pjgx./col_sum,2);
-%      end;
-%    end ;
-
 return;					% estep
  
 %%%%%%%%%%%%%%%%%%%%%%%%%%  M-STEP  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [gmm]=mstep(gmm,X,K, groups)
+function [gmm]=mstep(gmm,X,K)
 
-[~,d] = size(X);
+O = ~isnan(X);
 
-observed = ~isnan(X);
+X(~O) = 0;
 
 pr=gmm.priors;			% model priors
 
 gammasum=sum(gmm.pjgx,1);
 
+weidata = ((X'*gmm.pjgx)./(O'*gmm.pjgx));
+
+
 for k = 1:K
   
     qp=gmm.post(k);
     
-    postprec = gammasum(k)*qp.Wish_alpha*qp.Wish_iB+pr.Norm_Prec;
-    postvar=inv(postprec);
+    wX = (gmm.pjgx(:,k).*X);
+    wO = gmm.pjgx(:,k).*O;
+    XwX = wX'*X;
+    OwO = wO'*O;
+    XwO = wX'*O;
+
+    XX = XwX./OwO;
+    M  = XwO./OwO;
     
-    weidata = zeros(d,1);
-    w = zeros(d,1);
     
-    for g=1:size(groups,2)
-        
-        group = groups(:,g);
-
-        o = observed(find(group,1),:);
-
-        weidata(o) = weidata(o)+X(group,o)'*gmm.pjgx(group,k);
-        w(o) = w(o)+sum(gmm.pjgx(group,k));
-    end
+    sampvar = XX-M.*M';
     
-    weidata = (weidata./w)*gammasum(k);
+    sampvar(OwO==0) = 0;
     
-    Norm_Mu = postvar*(qp.Wish_alpha*qp.Wish_iB*weidata+pr.Norm_Prec*pr.Norm_Mu);
-    Norm_Prec=postprec;
-    Norm_Cov=postvar;
-
-    Wish_alpha=0.5*gammasum(k)+pr.Wish_alpha;
     
-    sampvar = zeros(d);
+    Norm_Prec = gammasum(k)*qp.Wish_alpha*qp.Wish_iB+pr.Norm_Prec;
+    Norm_Cov = inv(Norm_Prec);
     
-    for x=1:d
-                
-        group = observed(:,x);
-
-        Delta = X(group,x)-Norm_Mu(x);
-        sampvar(x,x) = gmm.pjgx(group,k)'*(Delta.^2)/sum(gmm.pjgx(group,k));
-        
-        for y=x+1:d
-
-            group = observed(:,x)&observed(:,y);
-
-            if(sum(group)>0)
-
-                Delta_x = X(group,x)-Norm_Mu(x);
-                Delta_y = X(group,y)-Norm_Mu(y);
-
-                sampvar(x,y) = bsxfun(@times,Delta_x,gmm.pjgx(group,k))'*Delta_y/sum(gmm.pjgx(group,k));
-                
-                sampvar(y,x) = sampvar(x,y);
-            end
-
-        end
-    end
-
+    Norm_Mu = Norm_Cov*(gammasum(k)*qp.Wish_alpha*qp.Wish_iB*weidata(:,k)+pr.Norm_Prec*pr.Norm_Mu);
+    
     Wish_B=0.5*gammasum(k)*(sampvar+Norm_Cov)+pr.Wish_B;
-    Wish_iB=inv(Wish_B);
+    
+    [~,p] = chol(Wish_B);
+    
+    if(p~=0)
+        Wish_B = diag(diag(Wish_B));
+    end
+    
+    %%%%%%%%%%%%%%%%%%%
+    
+    
+    Wish_iB = inv(Wish_B);
+    
+    Wish_alpha = 0.5*gammasum(k)+pr.Wish_alpha;
 
     % Update posterior Dirichlet
     Dir_alpha=gammasum(k)+pr.Dir_alpha(k);
@@ -334,6 +299,7 @@ for k = 1:K
     gmm.post(k).Wish_B=Wish_B;
     gmm.post(k).Wish_iB=Wish_iB;
     gmm.post(k).Dir_alpha=Dir_alpha;
+
 end
 
 return;
@@ -375,11 +341,13 @@ for k=1:K
         
         L = chol(qp.Wish_B(o,o));
         Li = inv(L);
+        
+        
         Wish_iBoo = Li*Li';
-        ldetWishB=sum(log(diag(L)));
+        ldetWishB = -sum(log(diag(Li)));
         
         delta = X(group,o)-qp.Norm_Mu(o)';
-        dist = -0.5*sum((delta/L).^2,2)*qp.Wish_alpha;
+        dist = -0.5*sum((delta*Li).^2,2)*qp.Wish_alpha;
        
         NormWishtrace=0.5*qp.Wish_alpha*sum(sum((Wish_iBoo'.*qp.Norm_Cov(o,o))));
         PsiWish_alphasum = 0.5*sum(psi(qp.Wish_alpha+0.5-(1:do)/2));

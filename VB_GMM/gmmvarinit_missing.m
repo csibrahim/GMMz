@@ -14,7 +14,6 @@ function [gmm] = gmmvarinit_missing(X,K,options)
 		      [],'Norm_Prec',[],'Wish_B',[],'Wish_iB',[],...
 		      'Wish_alpha',[],'Wish_k',[]);
   
-%     [U,S] = eig(Sigma);
     
   defgmmpriors.Dir_alpha=ones(1,K);
   defgmmpriors.Norm_Mu=midscale;
@@ -22,8 +21,9 @@ function [gmm] = gmmvarinit_missing(X,K,options)
   defgmmpriors.Norm_Prec=inv(defgmmpriors.Norm_Cov);
   defgmmpriors.Wish_B=diag(drange);
   defgmmpriors.Wish_iB=inv(defgmmpriors.Wish_B);
-  defgmmpriors.Wish_alpha=d;
+  defgmmpriors.Wish_alpha=d+1;
   defgmmpriors.Wish_k=d;
+ 
   
   % assigning default P-priors 
   if ~isfield(options,'priors')
@@ -65,6 +65,8 @@ function [gmm] = gmmvarinit_missing(X,K,options)
         gmm.post(k).Wish_alpha=Nm(k);
         gmm.post(k).Wish_B=(km_model.Sigma/nthroot(K,d))*Nm(k);
         gmm.post(k).Wish_iB=inv(gmm.post(k).Wish_B);
+        gmm.post(k).L = chol(gmm.post(k).Wish_B);
+        gmm.post(k).Li = chol(gmm.post(k).Wish_B);
         gmm.post(k).Dir_alpha=Nm(k);
     end
     
@@ -112,12 +114,12 @@ function [gmm] = gmmvarinit_missing(X,K,options)
     for k=1:K
         
         gmm.post(k).Norm_Mu = km_model.mus(k,:)';
-        gmm.post(k).Norm_Cov=Covcentre;
+        gmm.post(k).Norm_Cov = Covcentre;
         gmm.post(k).Norm_Prec = inv(Covcentre);
-        gmm.post(k).Wish_alpha=alphas(k);
-        gmm.post(k).Wish_B=km_model.Sigmas(:,:,k)*alphas(k);
-        gmm.post(k).Wish_iB=inv(gmm.post(k).Wish_B);
-        gmm.post(k).Dir_alpha=alphas(k);
+        gmm.post(k).Wish_alpha = alphas(k);
+        gmm.post(k).Wish_B = km_model.Sigmas(:,:,k)*alphas(k);
+        gmm.post(k).Wish_iB = inv(gmm.post(k).Wish_B);
+        gmm.post(k).Dir_alpha = alphas(k);
     end
        
    otherwise
