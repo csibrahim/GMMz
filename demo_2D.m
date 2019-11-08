@@ -1,20 +1,17 @@
 
 %%%%%% CONFIGURATION %%%%%% 
-rng(1);             % fix random seed
-addpath VB_GMM/     % add path
+rng(1);                     % fix random seed
+addpath GMMz/               % add path
 
 % training options
-maxIter = 100;      % maximum number of iterations
-tol = 1e-10;        % early stoping criteria if no significant improvement is gained
-init= 'kmeans';     % initialization option ('rand', 'conditional', 'kmeans')
-cov = 'full';       % type of covariance ('full', 'diag')
-display=1;          % display progress
+maxIter = 500;              % maximum number of iterations
+tol = 1e-10;                % early stoping criteria if no significant improvement is gained
 
 % data creating options
 
-n = 1000;           % number of samples
-K = 100;            % number of mixtures (much higher than the real number of 3)
-percentage = 0.0;   % percentage of data with a missing variable (half will be missing x and the other half will be missing y)
+n = 1000;                   % number of samples
+K = 100;                    % number of mixtures (much higher than the real number of 3)
+percentage = 0.5;           % percentage of data with a missing variable (half will be missing x and the other half will be missing y)
 
 %%%%%% SETUP %%%%%% 
 
@@ -51,21 +48,18 @@ X3(shuffle(1:floor(percentage*n(3))),2) = nan;
 
 X = [X1;X2;X3];
 
+
 missing = isnan(X);
 
 d =  size(X,2);
 %%%%%% TRAINING %%%%%% 
 
 % training options
-options.cyc=maxIter;
+options.maxIter=maxIter;
 options.tol=tol;
-options.init=init;
-options.cov=cov;
-options.display=display;
 
 % Fitting a GMM to the data set
-model = gmmvar_missing(X,K,options);
-% model = kmeans_missing(X,K,100);
+model = GMMz(X,K,options);
 
 %%%%%%%%%%%%%%%%% PLOTING %%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -119,9 +113,11 @@ for o=1:2
     X(missing) = nan;
     u = 3-o;
     
+    bins = 1000;
     % creating a test set that covers the range of the observed variable
-    Xs = nan(100,2);
-    Xs(:,o) = linspace(min(X(:,o))-1,max(X(:,o)),100)';
+    Xs = nan(bins,2);
+    range = max(X(:,o))-min(X(:,o));
+    Xs(:,o) = linspace(min(X(:,o))-range/10,max(X(:,o)+range/10),bins)';
 
     % predict the means, modes and medians of the unknoen variable 'u'
     % given the ovserved variable 'o'

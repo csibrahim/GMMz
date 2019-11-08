@@ -41,21 +41,40 @@ function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
     
     Sigma(OO==0) = 0;
     
+    Sigma = (Sigma.*OO+eye(d))./(OO+1);
+    
     mu = diag(M)';
     mu = (mu.*sum(O))./(sum(O)+1);
     
+    
+%     for g=1:size(groups,2)
+% 
+%         group = groups(:,g);
+% 
+%         o = ~missing(find(group,1),:);
+%         u = ~o;
+%         
+%         X(group,u) = mu(u)+(X(group,o)-mu(o))*(Sigma(o,o)\Sigma(o,u));
+%     end
+%     
+%     
     shuffle = randperm(sum(training));
     training_ids = find(training);
     training_shuffled = training_ids(shuffle);
     
     mus = X(training_shuffled(1:K),:);
-    
+
+
+%     [U,S] = eig(Sigma);
+%     mus = (rand(K,d)-0.5)*sqrt(12);
+%     mus = bsxfun(@plus,mus*U*sqrt(S),mu);
+
+    X(missing) = 0;
     
     logLikelihood = zeros(n,K); 
 
     max_mll = -inf;
     old_mll = 0;
-    
     
     for iter = 1:maxIter
 
@@ -85,7 +104,7 @@ function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
         
         Px = sum(likelihood,2)*exp(-(min_do/2)*log(2*pi)); 
         
-        gravity = 1e-2;
+        gravity = 1e-10;
         WX = posterior(training,:)'*X(training,:)+gravity*mu;
         WO = posterior(training,:)'*O(training,:)+gravity;
         

@@ -80,8 +80,8 @@ function values = percentile(X,input,output,model, prct)
         max_y = mu+10*sqrt(sigma);
         
         while(error>tol)
-
-            ZScore = bsxfun(@plus,-Euo_j,values(:,i))./sqrt(Vuo_j);
+            
+            ZScore = bsxfun(@plus,-Euo_j,values(:,i))./sqrt(2*Vuo_j);
             CDF = sum(0.5*(1+erf(ZScore)).*Po_j,2);
 
             max_y(CDF>prct(i)) = values(CDF>prct(i),i);
