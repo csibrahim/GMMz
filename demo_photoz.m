@@ -160,17 +160,17 @@ legend(handles,legends,'interpreter','latex','Location','northwest');
 %%%%%%%%% the qq plot %%%%%%%%%
 
 % theoratical values
-qq_theory = 0.01:0.01:0.99;
-z = percentile(X(testing,:),1:d-1,d,model,qq_theory);
+q_theory = 0.01:0.01:0.99;
+z = percentile(X(testing,:),1:d-1,d,model,q_theory);
 
 % emprical values
-qq_data = mean(repmat(Zspec,1,size(z,2))<z);
+q_data = mean(repmat(Zspec,1,size(z,2))<z);
 
-qq_theory = [0 qq_theory 1];
-qq_data   = [0 qq_data 1];
+q_theory = [0 q_theory 1];
+q_data   = [0 q_data 1];
 
 figure;
-plot(qq_theory,qq_theory,'k--',qq_theory,qq_data,'.-', 'MarkerSize', 15); axis tight
+plot(q_theory,q_theory,'k--',q_theory,q_data,'.-', 'MarkerSize', 15); axis tight
 
 %%%%%%%%% metrics as functions of data percentage %%%%%%%%%
  
@@ -180,7 +180,7 @@ x = [1 5:5:100];
 ind = round(x*length(Zspec)/100);
 
 scores = zeros(3,5);
- 
+
 %root mean squared error, i.e. sqrt(mean(errors^2))
 figure;
 hold on

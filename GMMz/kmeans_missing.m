@@ -1,4 +1,4 @@
-function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
+function model = kmeans_missing(X,K,maxIter,training,validation)
 
     if(nargin==5)
         X = X(training,:);
@@ -30,6 +30,8 @@ function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
     end
     
     X(missing) = 0;
+    
+    beta0 = 1;
 
     XX = X(training,:)'*X(training,:);
     OO = O(training,:)'*O(training,:);
@@ -41,33 +43,17 @@ function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
     
     Sigma(OO==0) = 0;
     
-    Sigma = (Sigma.*OO+eye(d))./(OO+1);
+    Sigma = (Sigma.*OO+beta0*eye(d))./(OO+beta0);
     
     mu = diag(M)';
-    mu = (mu.*sum(O))./(sum(O)+1);
+    mu = (mu.*sum(O))./(sum(O)+beta0);
     
     
-%     for g=1:size(groups,2)
-% 
-%         group = groups(:,g);
-% 
-%         o = ~missing(find(group,1),:);
-%         u = ~o;
-%         
-%         X(group,u) = mu(u)+(X(group,o)-mu(o))*(Sigma(o,o)\Sigma(o,u));
-%     end
-%     
-%     
     shuffle = randperm(sum(training));
     training_ids = find(training);
     training_shuffled = training_ids(shuffle);
     
     mus = X(training_shuffled(1:K),:);
-
-
-%     [U,S] = eig(Sigma);
-%     mus = (rand(K,d)-0.5)*sqrt(12);
-%     mus = bsxfun(@plus,mus*U*sqrt(S),mu);
 
     X(missing) = 0;
     
@@ -75,6 +61,8 @@ function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
 
     max_mll = -inf;
     old_mll = 0;
+    
+    weights = ones(1,K)/K;
     
     for iter = 1:maxIter
 
@@ -87,28 +75,36 @@ function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
                 o = ~missing(find(group,1),:)&~isnan(mus(j,:));
                 
                 do = sum(o);
-            
-
-                Delta = X(group,o)-mus(j,o);
                 
-                logLikelihood(group, j) = -0.5*sum(Delta.^2,2)-0.5*(do-min_do)*log(2*pi);
+                L = chol(Sigma(o,o));
+            
+                Delta = X(group,o)-mus(j,o);
+                DeltaL = Delta/L;
+                
+                logS = sum(log(diag(L)));
+               
+                logLikelihood(group, j) = -0.5*sum(DeltaL.^2,2)-logS-0.5*(do-min_do)*log(2*pi);
             end
 
         end
         
-        [~,cids] = max(logLikelihood,[],2);
         
-        posterior = sparse(1:n,cids,1,n,K);
-        
-        likelihood = exp(logLikelihood)+eps;
+        likelihood = exp(logLikelihood).*weights+eps;
+
         
         Px = sum(likelihood,2)*exp(-(min_do/2)*log(2*pi)); 
         
-        gravity = 1e-10;
-        WX = posterior(training,:)'*X(training,:)+gravity*mu;
-        WO = posterior(training,:)'*O(training,:)+gravity;
+        [~,cids] = max(logLikelihood,[],2);
         
-        mus = WX./WO;
+        R = full(sparse(1:n,cids,1,n,K))+eps;
+        R = R./sum(R,2);
+        
+        weights = mean(R);
+        
+        RX = R(training,:)'*X(training,:)+beta0*mu;
+        RO = R(training,:)'*O(training,:)+beta0;
+        
+        mus = RX./RO;
         
         
         train_mll = mean(log(Px(training)));
@@ -136,28 +132,29 @@ function [model, posterior] = kmeans_missing(X,K,maxIter,training,validation)
 
     end
     
+
     
-    Nm = full(sum(posterior(training,:)));
+    remove = weights==0;
     
-    remove = Nm==0;
-    
-    Nm(remove) = [];
+    weights(remove) = [];
     mus(remove,:) = [];
-    posterior = full(posterior(:,~remove));
+    R(:,remove) = [];
     
     K = K-sum(remove);
     
     Sigmas = zeros(d,d,K);
     
-    weights = Nm/sum(Nm);
+    weights = weights/sum(weights);
     
     for j=1:K
             
-        Sigmas(:,:,j) = Sigma/nthroot(K,d);
+        Sigmas(:,:,j) = Sigma;
         
     end
     
-    posterior = full(posterior);
+    model.logR = log(R);
+    model.R = R;
+    model.alpha = sum(R)+1;
     model.mu = mu;
     model.Sigma = Sigma;
     

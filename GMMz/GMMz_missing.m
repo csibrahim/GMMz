@@ -9,7 +9,6 @@ function model = GMMz_missing(X, K, options)
 % Reference: Pattern Recognition and Machine Learning by Christopher M. Bishop (P.474)
 % Written by Mo Chen (sth4nth@gmail.com).
 
-fprintf('Variational Bayesian Gaussian mixture: running ... \n');
 [n,d] = size(X);
 
 O = ~isnan(X);
@@ -32,98 +31,115 @@ if nargin < 3
     
 end
 
-model = kmeans_missing(X,1,5);
-
-prior.alpha = 1;
-prior.beta = 1;
-prior.mu = model.mus(1,:);
-prior.v = d+1;
-prior.M = model.Sigmas(:,:,1);
-
-prior.logW = -2*sum(log(diag(chol(prior.M))));
-
 oldL = -inf;
-model = init(X,K,prior);
+model = init(X,K);
 fprintf('Optimizing ... \n');
 for iter = 1:options.maxIter
-    model = expect(X,model,groups);
-    model = maximize(X,model,prior);
     
-    L = bound(X,model,prior)/n;
+    model = expect(X,model,groups);
+    model = maximize(X,model);
+    L = bound(X,model)/n;
+
     fprintf('%d\t%f\n',iter,L);
     
     if abs((L - oldL)/oldL) < options.tol; break; end
     
     oldL = L;
+    
+    model = reduce(model);
 end
 
-model.weights = model.alpha/sum(model.alpha);
+model = reduce(model);
 
-Nk = floor(model.alpha-1);
-
-selected = Nk>2;
-
-K = sum(selected);
-
-weights = model.alpha(selected);
-weights = weights/sum(weights);
-
-mus = model.mus(selected,:);
-Sigmas = model.Sigmas(:,:,selected);
-
-model.K = K;
-model.R = model.R(:,selected);
-model.mus = mus;
-model.Sigmas = Sigmas;
-model.weights = weights;
-
-function model = init(X, m, prior)
-n = size(X,1);
-if isstruct(m)  % init with a model
-    model = m;
-elseif numel(m) == 1  % random init k
+function model = reduce(model)
     
-    fprintf('Initializing using k-means with 20 iterations ... \n');
-    [model, R] = kmeans_missing(X,m,20);
-    model.R = R;
-    
-elseif all(size(m)==[1,n])  % init with labels
-    label = m;
-    k = max(label);
-    model.R = full(sparse(1:n,label,1,n,k,n));
-else
-    error('ERROR: init is not valid.');
-end
-model = maximize(X,model,prior);
+    model.weights = model.alpha/sum(model.alpha);
 
-% Done
-function model = maximize(X, model, prior)
+    selected = floor(model.alpha)>3;
+
+    K = sum(selected);
+
+
+    model.K = K;
+    model.alpha = model.alpha(selected);
+    model.v = model.v(selected);
+    model.beta = model.beta(selected,:);
+    model.R = model.R(:,selected);
+    model.logR = model.logR(:,selected);
+    model.mus = model.mus(selected,:);
+    model.Sigmas = model.Sigmas(:,:,selected);
+    model.weights = model.weights(selected);
+    model.M = model.M(:,:,selected);
+    model.logW = model.logW(selected);
+    
+function model = init(X, K)
+
+    n = size(X,1);
+
+    if isstruct(K)  % init with a model
+        model = K;
+
+    elseif numel(K) == 1  % random init k
+
+        
+        fprintf('Initializing using k-means with 20 iterations ... \n');
+        model = kmeans_missing(X,K,20);
+        
+        model.prior = setPriors(X);
+        
+        model = maximize(X,model);
+
+    elseif all(size(K)==[1,n])  % init with labels
+        label = K;
+        k = max(label);
+        model.R = full(sparse(1:n,label,1,n,k,n));
+        model.prior = setPriors(X);
+        model = maximize(X,model);
+    else
+        error('ERROR: init is not valid.');
+    end
+    
+
+    
+
+
+function prior = setPriors(X)
+    
+    [n,d] = size(X);
+    
+    init_model = kmeans_missing(X,1,5);
+
+    prior.alpha = 1;
+    prior.beta = 1;
+    prior.mu = init_model.mus(1,:);
+    prior.v = d+1;
+    prior.M = (d+1)*init_model.Sigmas(:,:,1);
+
+    prior.logW = -2*sum(log(diag(chol(prior.M))));
+
+function model = maximize(X, model)
 
     [n,d] = size(X);
 
     O = ~isnan(X);
+    
     X(~O) = 0;
 
-    alpha0 = prior.alpha;
-    beta0 = prior.beta;
-    mu0 = prior.mu;
-    v0 = prior.v;
-    M0 = prior.M;
+    alpha0 = model.prior.alpha;
+    beta0 = model.prior.beta;
+    mu0 = model.prior.mu;
+    v0 = model.prior.v;
+    M0 = model.prior.M;
     R = model.R;
 
-    R = 1.5*R;
-
+    RO = R'*O;
+    
     nk = sum(R); % 10.51
     alpha = alpha0+nk; % 10.58
-    beta = beta0+nk; % 10.60
+    beta = RO+beta0; % 10.60
     v = v0+nk; % 10.63
 
-    RO = R'*O;
-
-    xk = (R'*X)./(RO);
-    xk(RO==0) = 0;
-
-    mus = (xk.*nk'+beta0*mu0)./beta';% 10.61
+    mus = (R'*X+beta0*mu0)./beta;% 10.61
 
     k = size(mus,1);
 
@@ -131,34 +147,38 @@ function model = maximize(X, model, prior)
     Sigmas = zeros(d,d,k);
     logW = zeros(1,k);
 
+    X = [X;mu0];
+    O = [O;true(1,d)];
+    
     for i = 1:k
 
-        wX = R(:,i).*X;
-        wO = R(:,i).*O;
-        XwX = wX'*X;
-        OwO = wO'*O;
-        XwO = wX'*O;
+        
+        RXi = [R(:,i);beta0].*X;
+        ROi = [R(:,i);beta0].*O;
+        
+        XRX = X'*RXi;
+        ORO = O'*ROi;
+        OXR = O'*RXi;
 
-
-        Sk = XwX-(XwO.*XwO')./OwO;
-
-        Sk = Sk./OwO;
-        Sk(OwO==0) = 0;
-
-        m0mTm0m = (xk(i,:)-mu0)'*(xk(i,:)-mu0);
-
-        M(:,:,i) = M0+nk(i)*(Sk+beta0*(m0mTm0m)/beta(i));     % equivalent to 10.62
-
-
+        MM = (OXR.*OXR')./ORO;
+        
+        
+        Mk = XRX-MM;
+        
+        Mk = (nk(i)+beta0)*(Mk./ORO);
+        
+        M(:,:,i) = M0+Mk;
+       
         [L,p] = chol(M(:,:,i));
-
+        
         if(p~=0)
             M(:,:,i) = diag(diag(M(:,:,i)));
             logW(i) = -sum(log(diag(M(:,:,i))));
         else
             logW(i) = -2*sum(log(diag(L)));
         end
-
+        
+        
         Sigmas(:,:,i) = M(:,:,i)/v(i);
 
     end
@@ -171,7 +191,6 @@ function model = maximize(X, model, prior)
     model.logW = logW;
     model.Sigmas = Sigmas;
 
-% Done
 function model = expect(X, model,groups)
 
 
@@ -181,7 +200,7 @@ function model = expect(X, model,groups)
     v = model.v;         % Whishart
     M = model.M;         % Whishart 
     n = size(X,1);
-    [k,d] = size(mus);
+    k = size(mus,1);
 
 
     O = ~isnan(X);
@@ -190,7 +209,7 @@ function model = expect(X, model,groups)
     logRho = zeros(n,k);
 
     for i = 1:k
-
+        
         for g=1:size(groups,2)
 
             group = groups(:,g);
@@ -202,14 +221,17 @@ function model = expect(X, model,groups)
             U = chol(M(o,o,i));
             logW = -2*sum(log(diag(U)));
 
-            Q = U'\bsxfun(@minus,X(group,o),mus(i,o))';
-            EQ = do/beta(i)+v(i)*dot(Q,Q,1);    % 10.64
-
+            delta = bsxfun(@minus,X(group,o),mus(i,o));
+            Q = U'\delta';
+            
+            EQ = sum(1./beta(i,o))+v(i)*dot(Q,Q,1);    % 10.64
+            
             ElogLambda = sum(psi(0,0.5*bsxfun(@minus,v(i)+1,(1:do)')),1)+do*log(2)+logW; % 10.65
             Elogpi = psi(0,alpha(i))-psi(0,sum(alpha)); % 10.66
 
             logRho(group,i) = -0.5*bsxfun(@minus,EQ,ElogLambda-do*log(2*pi)); % 10.46
             logRho(group,i) = bsxfun(@plus,logRho(group,i),Elogpi);   % 10.46
+            
         end
     end
 
@@ -219,12 +241,11 @@ function model = expect(X, model,groups)
     model.logR = logR;
     model.R = R;
 
-% Done
-function L = bound(X, model, prior)
-    alpha0 = prior.alpha;
-    beta0 = prior.beta;
-    v0 = prior.v;
-    logW0 = prior.logW;
+function L = bound(X, model)
+    alpha0 = model.prior.alpha;
+    beta0 = model.prior.beta;
+    v0 = model.prior.v;
+    logW0 = model.prior.logW;
     alpha = model.alpha; 
     beta = model.beta; 
     v = model.v;         
@@ -241,7 +262,7 @@ function L = bound(X, model, prior)
     logCalpha = gammaln(sum(alpha))-sum(gammaln(alpha));
     Eqpi = logCalpha;
     Epmu = 0.5*d*k*log(beta0);
-    Eqmu = 0.5*d*sum(log(beta));
+    Eqmu = 0.5*sum(log(beta(:)));
     logB0 = -0.5*v0*(logW0+d*log(2))-logMvGamma(0.5*v0,d);
     EpLambda = k*logB0;
     logB =  -0.5*v.*(logW+d*log(2))-logMvGamma(0.5*v,d);

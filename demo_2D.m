@@ -1,10 +1,11 @@
 
-%%%%%% CONFIGURATION %%%%%% 
+%%%%%%%%%%%%%%%%% CONFIGURATION %%%%%%%%%%%%%%%%%%
+
 rng(1);                     % fix random seed
 addpath GMMz/               % add path
 
 % training options
-maxIter = 500;              % maximum number of iterations
+maxIter = 1000;             % maximum number of iterations
 tol = 1e-10;                % early stoping criteria if no significant improvement is gained
 
 % data creating options
@@ -13,7 +14,7 @@ n = 1000;                   % number of samples
 K = 100;                    % number of mixtures (much higher than the real number of 3)
 percentage = 0.5;           % percentage of data with a missing variable (half will be missing x and the other half will be missing y)
 
-%%%%%% SETUP %%%%%% 
+%%%%%%%%%%%%%%%%% SETUP %%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % create an artificial dataset
 mean1 = [10 0];
@@ -33,6 +34,7 @@ groups = [group1 group2 group3];
 n = sum(groups);
 
 X1 = mvnrnd(mean1,Sigma1,n(1));
+
 X2 = mvnrnd(mean2,Sigma2,n(2));
 X3 = mvnrnd(mean3,Sigma3,n(3));
 
@@ -48,11 +50,11 @@ X3(shuffle(1:floor(percentage*n(3))),2) = nan;
 
 X = [X1;X2;X3];
 
-
 missing = isnan(X);
 
 d =  size(X,2);
-%%%%%% TRAINING %%%%%% 
+
+%%%%%%%%%%%%%%%%% TRAINING %%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % training options
 options.maxIter=maxIter;
@@ -90,28 +92,40 @@ for k=1:model.K
     
 end
 
+handles = [];
+legends = {};
 
-if(sum(missing(:))>0)
-    handles = [x_and_y(1),missing_x(1), missing_y(1), center(1), ellipse(1)];
-    legends = {'x \& y',['Missing ',labels(1)],['Missing ',labels(2)],'Means', 'Covariances'};
-    legend(handles,legends,'interpreter','latex');
-else
-    handles = [x_and_y(1),center(1), ellipse(1)];
-    legends = {'x \& y','Means', 'Covariances'};
-    legend(handles,legends,'interpreter','latex');
+if(sum(both)>0)
+    handles = x_and_y(1);
+    legends = {'x \& y'};
 end
+
+if(sum(missing(:,1))>0)
+    handles = [handles,missing_x(1)];
+    legends = {legends{:},['Missing ',labels(1)]};
+end
+
+if(sum(missing(:,2))>0)
+    handles = [handles, missing_y(1)];
+    legends = {legends{:},['Missing ',labels(2)]};
+end
+
+handles = [handles,center(1), ellipse(1)];
+legends = {legends{:},'Means', 'Covariances'};
+
+legend(handles,legends,'interpreter','latex');
+
 axis tight
 xlabel('x');
 ylabel('y');
 title('Probability of x and y');
 
-
 % plot the expectation of x given y and y given x
-for o=1:2
+for u=1:2
 
     % rest the nan values for the missing data
     X(missing) = nan;
-    u = 3-o;
+    o = 3-u;
     
     bins = 1000;
     % creating a test set that covers the range of the observed variable
@@ -139,12 +153,13 @@ for o=1:2
     pm2sigma = fill([Xs; flip(Xs)], f, [0.85 0.85 0.85]);
 
     
+    % plot samples with both variables observed
     x_and_y = plot(X(both,o),X(both,u),'k.');
 
-    % plot samples with both variable 'o' observed
+    % plot samples with only variable 'o' observed
     missing_o = plot(X(missing(:,o),o),X(missing(:,o),u),'ko','MarkerFaceColor','g');
     
-    % plot samples with both variable 'u' observed
+    % plot samples with only variable 'u' observed
     missing_u = plot(X(missing(:,u),o),X(missing(:,u),u),'ko','MarkerFaceColor','y');
 
     
@@ -157,13 +172,22 @@ for o=1:2
     % plot the mean curve
     mu_plot = plot(Xs,mu,'r-','LineWidth',2);
     
+    handles = [pm2sigma(1),mu_plot(1),mode_plot(1),median_plot(1)];
+    legends = {'95\%', 'Mean', 'Mode','Median'};
     
-    if(sum(missing(:))>0)
-        handles = [pm2sigma(1),mu_plot(1),mode_plot(1),median_plot(1),x_and_y(1),missing_o(1), missing_u(1)];
-        legends = {'95\%', 'Mean', 'Mode','Median','x \& y',['Missing ',labels(o)],['Missing ',labels(u)]};
-    else
-        handles = [pm2sigma(1),mu_plot(1),mode_plot(1),median_plot(1),x_and_y(1)];
-        legends = {'95\%', 'Mean', 'Mode','Median','x \& y'};
+    if(sum(both)>0)
+        handles = [handles,x_and_y(1)];
+        legends = {legends{:},'x \& y'};
+    end
+    
+    if(sum(missing(:,1))>0)
+        handles = [handles,missing_o(1)];
+        legends = {legends{:},['Missing ',labels(o)]};
+    end
+    
+    if(sum(missing(:,2))>0)
+        handles = [handles, missing_u(1)];
+        legends = {legends{:},['Missing ',labels(u)]};
     end
 
     
@@ -173,5 +197,9 @@ for o=1:2
     
     title([labels(u),' given ', labels(o)]);
     axis  tight
+    
+    if(o==2)
+        view([90 -90])
+    end
 end
 
